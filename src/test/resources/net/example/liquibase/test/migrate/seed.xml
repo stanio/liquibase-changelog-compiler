@@ -1,0 +1,26 @@
+<!--
+  - This module, both source code and documentation,
+  - is in the Public Domain, and comes with NO WARRANTY.
+  -->
+<databaseChangeLog logicalFilePath="bar" context="meh"
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd
+                            http://www.liquibase.org/xml/ns/dbchangelog-ext
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+    <property name="nene" value="boohoo" global="false" />
+
+    <changeSet id="1575652380176-2" author="john">
+        <loadData tableName="people" file="people.csv" relativeToChangelogFile="true">
+            <!-- Please use BOOLEAN, NUMERIC, DATE, STRING, COMPUTED, SEQUENCE, UUID or SKIP -->
+            <column name="name" type="STRING" />
+            <column name="age" type="NUMERIC" />
+            <column name="status" type="STRING" />
+        </loadData>
+        <rollback><!-- Do nothing --></rollback>
+    </changeSet>
+
+</databaseChangeLog>

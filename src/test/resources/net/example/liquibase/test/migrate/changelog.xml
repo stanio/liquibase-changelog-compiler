@@ -1,0 +1,58 @@
+<!--
+  - This module, both source code and documentation,
+  - is in the Public Domain, and comes with NO WARRANTY.
+  -->
+<databaseChangeLog context="abc"
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.8.xsd
+                            http://www.liquibase.org/xml/ns/dbchangelog-ext
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd">
+
+    <property name="blah" value="helloo" dbms="derby" />
+    <property name="bebe" value="meh" global="false" />
+    <property name="nene" value="nah" global="false" />
+
+    <preConditions onError="WARN"
+                   onErrorMessage="On error message"
+                   onFail="WARN"
+                   onFailMessage="On fail ${blah}"
+                   onSqlOutput="IGNORE">
+        <columnExists tableName="FOO_TABLE" columnName="BAR_COLUMN" />
+        <and>
+            <dbms type="mysql" />
+        </and>
+    </preConditions>
+
+    <include file="foo.xml" relativeToChangelogFile="true" context="xyz" />
+
+    <changeSet id="1575652380176-1" author="john" runInTransaction="false">
+        <createTable tableName="people">
+            <column name="id" type="java.sql.Types.INTEGER" autoIncrement="true">
+                <constraints primaryKey="true" />
+            </column>
+            <column name="name" type="java.sql.Types.VARCHAR(50)">
+                <constraints nullable="false" />
+            </column>
+            <column name="age" type="java.sql.Types.INTEGER">
+                <constraints nullable="false" />
+            </column>
+            <column name="status" type="java.sql.Types.CHAR(5)">
+                <constraints nullable="false" />
+            </column>
+            <column name="created_at" type="java.sql.Types.TIMESTAMP"
+                    defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false" />
+            </column>
+            <column name="updated_at" type="java.sql.Types.TIMESTAMP"
+                    defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+    </changeSet>
+
+    <include file="seed.xml" relativeToChangelogFile="true" />
+
+</databaseChangeLog>
