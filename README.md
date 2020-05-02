@@ -1,6 +1,37 @@
-# Liquibase Compile Command
+# Liquibase Changelog Compiler
 
-[CORE-3549][]: Implement "compileChangeLogXml" command
+Sandbox for [CORE-3549][]: Implement "compileChangeLogXml" command
+
+This project tries to implement the following build-time facilities:
+
+-   Convert source changelog to the built-in XML format
+
+    This would allow applying the migrations from a runtime without extra
+    dependencies to read other source formats, f.e. Groovy.
+
+    _Note,_ there's a [`ConvertCommand`](https://www.liquibase.org/javadoc/liquibase/sdk/convert/ConvertCommand.html)
+    which suffers from the current `XMLChangeLogSerializer` implementation
+    deficiencies outlined further below;
+
+-   Output either single file, or reconstruct source file structure
+
+    The single file may be faster the load, but there are some constraints
+    which cannot be recreated.
+
+    The supplied [`XMLChangeLogSerializer`](https://www.liquibase.org/javadoc/liquibase/serializer/core/xml/XMLChangeLogSerializer.html)
+    can output just to a single file, and further:
+
+    -   Doesn't output `<databaseChangeLog logicalFilePath="...">` or
+         `<changeSet logicalFilePath="...">` attributes, if necessary;
+    -   Doesn't output `<databaseChangeLog context="...">` or
+        `<changeSet context="...">`, if necessary;
+    -   Doesn't output changelog [properties](https://www.liquibase.org/documentation/changelog_parameters.html) or
+        changelog (vs. changeset) [preconditions](https://www.liquibase.org/documentation/preconditions.html);
+    -   Doesn't resolve `<loadData file="...">` and in similar refactorings, if necessary;
+    -   Other smaller inconsistencies.
+
+So the main thing this project provides currently is an `EnhancedXMLChangeLogSerializer`
+which extends (and re-implements internally) `XMLChangeLogSerializer`.
 
 ## Try it out
 

@@ -2,7 +2,7 @@
  * This module, both source code and documentation,
  * is in the Public Domain, and comes with NO WARRANTY.
  */
-package net.example.liquibase.command.ext;
+package net.example.liquibase.serializer.ext;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -10,7 +10,7 @@ import java.util.Set;
 import liquibase.LabelExpression;
 import liquibase.changelog.ChangeLogInclude;
 
-public class MoreCompleteChangeLogInclude extends ChangeLogInclude {
+public class EnhancedChangeLogInclude extends ChangeLogInclude {
 
     private LabelExpression labels;
 

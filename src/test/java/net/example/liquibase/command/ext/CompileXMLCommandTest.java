@@ -10,6 +10,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import java.nio.file.Paths;
 
 import org.junit.After;
+import org.junit.AssumptionViolatedException;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -48,7 +49,7 @@ public class CompileXMLCommandTest {
 
     @After
     public void manualInfo() {
-        System.out.println("Check out the result in "
+        throw new AssumptionViolatedException("Check out the result in "
                 + Paths.get(command.getOut()).resolve(command.getSrc()).getParent());
     }
 

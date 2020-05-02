@@ -19,6 +19,8 @@ import liquibase.resource.CompositeResourceAccessor;
 import liquibase.resource.FileSystemResourceAccessor;
 import liquibase.resource.ResourceAccessor;
 
+import net.example.liquibase.serializer.ext.EnhancedXMLChangeLogSerializer;
+
 /**
  * @see  liquibase.sdk.convert.ConvertCommand
  */

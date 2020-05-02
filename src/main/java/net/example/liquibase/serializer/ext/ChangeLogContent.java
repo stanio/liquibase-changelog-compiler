@@ -2,9 +2,9 @@
  * This module, both source code and documentation,
  * is in the Public Domain, and comes with NO WARRANTY.
  */
-package net.example.liquibase.command.ext;
+package net.example.liquibase.serializer.ext;
 
-import static net.example.liquibase.command.ext.EnhancedXMLChangeLogSerializer.xmlExt;
+import static net.example.liquibase.serializer.ext.EnhancedXMLChangeLogSerializer.xmlExt;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -51,7 +51,7 @@ class ChangeLogContent {
      */
     ChangeLogContent(DatabaseChangeLog changeLog, boolean singleFile) {
         this.singleFile = singleFile;
-        
+
         // https://www.liquibase.org/documentation/preconditions.html
         // Preconditions at the changelog level apply to all changeSets, not
         // just those listed in the current changelog or its child changelogs.
@@ -69,7 +69,8 @@ class ChangeLogContent {
             if (nextLog == changeLog || singleFile) {
                 content.add(changeSet);
             } else if (!contentMap.containsKey(nextLog)) {
-                MoreCompleteChangeLogInclude include = new MoreCompleteChangeLogInclude();
+                EnhancedChangeLogInclude include = new EnhancedChangeLogInclude();
+                // REVISIT: Have option to use relative paths.
                 include.setFile(urlPath(xmlExt(nextLog.getPhysicalFilePath())));
                 ContextExpression includeContexts = nextLog.getIncludeContexts();
                 if (includeContexts != null && !includeContexts.isEmpty()) {

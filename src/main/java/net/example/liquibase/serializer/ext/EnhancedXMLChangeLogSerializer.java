@@ -2,7 +2,7 @@
  * This module, both source code and documentation,
  * is in the Public Domain, and comes with NO WARRANTY.
  */
-package net.example.liquibase.command.ext;
+package net.example.liquibase.serializer.ext;
 
 import static javax.xml.XMLConstants.DEFAULT_NS_PREFIX;
 import static javax.xml.XMLConstants.W3C_XML_SCHEMA_INSTANCE_NS_URI;
@@ -14,16 +14,20 @@ import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Collection;
-import java.util.EnumSet;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import javax.xml.XMLConstants;
+
 import org.xml.sax.SAXException;
 
 import liquibase.ContextExpression;
+import liquibase.change.Change;
 import liquibase.change.core.CreateProcedureChange;
 import liquibase.change.core.CreateViewChange;
 import liquibase.change.core.LoadDataChange;
@@ -38,7 +42,7 @@ import liquibase.parser.NamespaceDetailsFactory;
 import liquibase.serializer.LiquibaseSerializable;
 import liquibase.serializer.LiquibaseSerializable.SerializationType;
 import liquibase.serializer.core.xml.XMLChangeLogSerializer;
-import net.example.liquibase.command.ext.SimpleXmlWriter.OutputOption;
+import net.example.liquibase.serializer.ext.util.SimpleXmlWriter;
 
 /**
  * Implements full serialization of {@code DatabaseChangeLog} breaking
@@ -57,8 +61,11 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
 
     private static boolean debugBase = true;
 
-    private String basePath;
-    private SimpleXmlWriter xmlWriter = new SimpleXmlWriter();
+    private String currentLogicalPath;
+    private DatabaseChangeLog currentChangeLog;
+    //private String currentPhysicalBase;
+    private SimpleXmlWriter xmlOut = new SimpleXmlWriter();
+    private String currentElement;
 
     public EnhancedXMLChangeLogSerializer() {
         super((org.w3c.dom.Document) null);
@@ -74,10 +81,10 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
             throws IOException
     {
         try {
-            basePath = null;
-            xmlWriter.startDocument(out);
+            currentChangeLog = null;
+            currentLogicalPath = null;
+            xmlOut.setUpWrite(out);
             writeChangeLog(null, children);
-            xmlWriter.endDocument();
         } catch (SAXException e) {
             throw ioExceptionFor(e);
         }
@@ -87,14 +94,13 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
     public String serialize(LiquibaseSerializable object, boolean pretty) {
         StringWriter buf = new StringWriter();
         try {
-            basePath = null;
-            EnumSet<OutputOption> options = EnumSet.of(OutputOption.OMIT_NS_DECL);
-            if (pretty) options.add(OutputOption.PRETTY);
-            xmlWriter.startDocument(buf, options);
-            declareStandardPrefixes();
+            currentChangeLog = null;
+            currentLogicalPath = null;
+            xmlOut.setUpWrite(buf, pretty, false);
+            declareNamespacePrefixes();
             writeObject(object);
-            xmlWriter.endDocument();
-        } catch (SAXException | IOException e) {
+            xmlOut.writeEndDocument();
+        } catch (SAXException e) {
             throw new UnexpectedLiquibaseException(e);
         }
         return buf.toString();
@@ -106,12 +112,12 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
         try {
             ChangeLogContent structure = new ChangeLogContent(databaseChangeLog, true);
             for (DatabaseChangeLog log : structure.getChangeLogs()) {
-                basePath = databaseChangeLog.getLogicalFilePath();
-                xmlWriter.startDocument(buf);
+                currentChangeLog = log;
+                currentLogicalPath = databaseChangeLog.getLogicalFilePath();
+                xmlOut.setUpWrite(buf);
                 writeChangeLog(log, structure.getContent(log));
-                xmlWriter.endDocument();
             }
-        } catch (SAXException | IOException e) {
+        } catch (IOException | SAXException e) {
             throw new UnexpectedLiquibaseException(e);
         }
         return buf.toString();
@@ -138,14 +144,14 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
         Path targetPath = Paths.get(targetDir).toAbsolutePath();
         ChangeLogContent structure = new ChangeLogContent(changeLog, singleFile);
         for (DatabaseChangeLog log : structure.getChangeLogs()) {
-            basePath = xmlExt(log.getPhysicalFilePath());
-            Path changeLogFile = targetPath.resolve(basePath);
+            currentChangeLog = log;
+            currentLogicalPath = xmlExt(log.getPhysicalFilePath());
+            Path changeLogFile = targetPath.resolve(currentLogicalPath);
             Files.createDirectories(changeLogFile.getParent());
             try (OutputStream out = Files.newOutputStream(changeLogFile)) {
-                basePath = basePath.replace('\\', '/');
-                xmlWriter.startDocument(out);
+                currentLogicalPath = currentLogicalPath.replace('\\', '/');
+                xmlOut.setUpWrite(out);
                 writeChangeLog(log, structure.getContent(log));
-                xmlWriter.endDocument();
             } catch (SAXException e) {
                 throw ioExceptionFor(e);
             }
@@ -168,18 +174,20 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
 
     private void writeChangeLog(DatabaseChangeLog changeLog,
                                 List<? extends ChangeLogChild> content)
-            throws SAXException
+            throws IOException, SAXException
     {
-        xmlWriter.startElement("databaseChangeLog");
-        addChangeLogAttributes(changeLog);
+        xmlOut.writeStartDocument();
+        xmlOut.writeStartElement("databaseChangeLog");
+        writeChangeLogAttributes(changeLog);
         for (ChangeLogChild child : content) {
             writeObject(child);
         }
-        xmlWriter.endElement();
+        xmlOut.writeEndElement();
+        xmlOut.writeEndDocument();
     }
 
-    private String declareStandardPrefixes() {
-        xmlWriter.declarePrefix(DEFAULT_NS_PREFIX, STANDARD_CHANGELOG_NAMESPACE);
+    private String declareNamespacePrefixes() {
+        xmlOut.setPrefix(DEFAULT_NS_PREFIX, STANDARD_CHANGELOG_NAMESPACE);
 
         StringBuilder schemaLocations = new StringBuilder(500);
         for (NamespaceDetails details : NamespaceDetailsFactory.getInstance().getNamespaceDetails()) {
@@ -188,7 +196,7 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
                     String shortName = details.getShortName(namespace);
                     String schemaUrl = details.getSchemaUrl(namespace);
                     if (shortName != null && !shortName.isEmpty()) {
-                        xmlWriter.declarePrefix(shortName, namespace);
+                        xmlOut.setPrefix(shortName, namespace);
                     }
                     if (schemaUrl != null) {
                         schemaLocations.append(namespace)
@@ -200,30 +208,30 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
         return schemaLocations.toString().trim();
     }
 
-    private void addChangeLogAttributes(DatabaseChangeLog changeLog) {
+    private void writeChangeLogAttributes(DatabaseChangeLog changeLog) {
         if (changeLog != null) {
-            if (basePath != null && !basePath.equals(changeLog.getLogicalFilePath())) {
-                xmlWriter.addAttribute("logicalFilePath", changeLog.getLogicalFilePath());
-                basePath = changeLog.getLogicalFilePath();
+            if (currentLogicalPath != null && !currentLogicalPath.equals(changeLog.getLogicalFilePath())) {
+                xmlOut.writeAttribute("logicalFilePath", changeLog.getLogicalFilePath());
+                currentLogicalPath = changeLog.getLogicalFilePath();
             }
             ContextExpression contexts = changeLog.getContexts();
             if (contexts != null && !contexts.isEmpty()) {
-                xmlWriter.addAttribute("context", contexts.toString());
+                xmlOut.writeAttribute("context", contexts.toString());
             }
             if (changeLog.getObjectQuotingStrategy() != null
                     && changeLog.getObjectQuotingStrategy() != ObjectQuotingStrategy.LEGACY) {
-                xmlWriter.addAttribute("objectQuotingStrategy",
+                xmlOut.writeAttribute("objectQuotingStrategy",
                         changeLog.getObjectQuotingStrategy().toString());
             }
         }
-        String schemaLocations = declareStandardPrefixes();
+        String schemaLocations = declareNamespacePrefixes();
         if (schemaLocations.length() > 0) {
-            xmlWriter.declarePrefix("xsi", W3C_XML_SCHEMA_INSTANCE_NS_URI);
-            xmlWriter.addAttribute("xsi:schemaLocation", schemaLocations);
+            xmlOut.setPrefix("xsi", W3C_XML_SCHEMA_INSTANCE_NS_URI);
+            xmlOut.writeAttribute("xsi:schemaLocation", schemaLocations);
         }
     }
 
-    private Set<String> addSerializableAttributes(LiquibaseSerializable object) {
+    private Set<String> writeSerializableAttributes(LiquibaseSerializable object) {
         Set<String> remaining = new LinkedHashSet<>();
         for (String field : object.getSerializableFields()) {
             Object value = object.getSerializableFieldValue(field);
@@ -242,49 +250,113 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
                 continue;
             }
 
-            String attributeName = qualifyAttributeName(field,
-                    object.getSerializableFieldNamespace(field),
-                    object.getSerializedObjectNamespace());
-            try {
-                xmlWriter.addAttribute(attributeName, checkString(value.toString()));
-            } catch (UnexpectedLiquibaseException e) {
-                throw new UnexpectedLiquibaseException(e.getMessage()
-                        + " on " + object.getSerializedObjectName() + "." + field
-                        + ". To resolve, remove the invalid character on the database and try again");
+            if (writeFilePathAttribute(object, field)
+                    || writeChangeSetAttribute(object, field)) {
+                continue;
             }
+            writeAttribute(object.getSerializableFieldNamespace(field),
+                           field, value, object.getSerializedObjectNamespace());
         }
         if (object instanceof ChangeSet) {
-            ChangeSet changeSet = (ChangeSet) object;
-            if (basePath != null
-                    && !basePath.equals(changeSet.getFilePath())
-                    && xmlWriter.attributes().getValue("logicalFilePath") == null) {
-                xmlWriter.addAttribute("logicalFilePath", changeSet.getFilePath());
+            Object changeSetLogicalPath = null;
+            if (object.getSerializableFields().contains("logicalFilePath")) {
+                changeSetLogicalPath = object.getSerializableFieldValue("logicalFilePath");
             }
-            // TODO: Merge changelog context and include context, if necessary.
-            // TODO: Merge changelog include labels, if necessary.
-        } else if (object instanceof LoadDataChange) {
-            // TODO: Adjust file, if necessary.
-        } else if (object instanceof SQLFileChange) {
-            // TODO: Adjust path, if necessary.
-        } else if (object instanceof CreateViewChange) {
-            // TODO: Adjust path, if necessary.
-        } else if (object instanceof CreateProcedureChange) {
-            // TODO: Adjust path, if necessary.
+            ChangeSet changeSet = (ChangeSet) object;
+            if (changeSetLogicalPath == null
+                    && currentLogicalPath != null
+                    && !currentLogicalPath.equals(changeSet.getFilePath())) {
+                xmlOut.writeAttribute("logicalFilePath", changeSet.getFilePath());
+            }
         }
         return remaining;
+    }
+
+    private boolean writeChangeSetAttribute(LiquibaseSerializable object, String field) {
+        if (!(object instanceof ChangeSet)) {
+            return false;
+        }
+        ChangeSet changetSet = (ChangeSet) object;
+        if (field.equals("context")
+                && currentChangeLog != null
+                && changetSet.getChangeLog() != currentChangeLog
+                && changetSet.getChangeLog() != null) {
+            List<ContextExpression> contexts = new ArrayList<>();
+            addContexts(changetSet.getContexts(), contexts);
+            DatabaseChangeLog currentLog = changetSet.getChangeLog();
+            while (currentLog != null) {
+                addContexts(currentLog.getContexts(), contexts);
+                addContexts(currentLog.getIncludeContexts(), contexts);
+                currentLog = currentLog.getParentChangeLog();
+            }
+            if (contexts.isEmpty()) {
+                return true; // Nothing would be written
+            }
+            Collections.reverse(contexts);
+            writeAttribute(object.getSerializableFieldNamespace(field), field,
+                    toAndString(contexts), object.getSerializedObjectNamespace());
+            return true;
+        }
+        // REVISIT: Introduce option to erase "context" and/or "labels",
+        // while filtering out change-sets which do not match given
+        // context and/or labels.
+        return false;
+    }
+
+    private static void addContexts(ContextExpression expr,
+                                    Collection<ContextExpression> contexts) {
+        if (expr != null && !expr.isEmpty()) {
+            contexts.add(expr);
+        }
+    }
+
+    private static String toAndString(Collection<ContextExpression> contexts) {
+        StringBuilder value = new StringBuilder();
+        for (ContextExpression expr : contexts) {
+            if (value.length() > 0) {
+                value.append(" AND ");
+            }
+            value.append('(').append(expr.toString()).append(')');
+        }
+        return value.toString();
+    }
+
+    private boolean writeFilePathAttribute(LiquibaseSerializable object, String field) {
+        String pathField;
+        if (object instanceof LoadDataChange) {
+            pathField = "file";
+        } else if (object instanceof SQLFileChange
+                || object instanceof CreateViewChange
+                || object instanceof CreateProcedureChange) {
+            pathField = "path";
+        } else {
+            return false;
+        }
+
+        Change change = (Change) object;
+        if (field.equals(pathField)
+                && Boolean.TRUE.equals(change.getSerializableFieldValue("relativeToChangelogFile"))) {
+            writeAttribute(change.getSerializableFieldNamespace(pathField), pathField,
+                    resolvePath(change, pathField), change.getSerializedObjectNamespace());
+            return true;
+        } else if (field.equals("relativeToChangelogFile")) {
+            return true; // Don't write - imply default value of false.
+        }
+        return false;
     }
 
     private void writeObject(LiquibaseSerializable object) throws SAXException {
         String namespace = object.getSerializedObjectNamespace();
         try {
-            xmlWriter.startElement(namespace, object.getSerializedObjectName());
-            for (String field : addSerializableAttributes(object)) {
-                writeFieldValue(object.getSerializableFieldNamespace(field),
+            xmlOut.writeStartElement(namespace, object.getSerializedObjectName());
+            currentElement = object.getSerializedObjectName();
+            for (String field : writeSerializableAttributes(object)) {
+                writeField(object.getSerializableFieldNamespace(field),
                                 field, object.getSerializableFieldValue(field),
                                 object.getSerializableFieldType(field),
                                 namespace);
             }
-            xmlWriter.endElement();
+            xmlOut.writeEndElement();
         } catch (UnexpectedLiquibaseException e) {
             if (object instanceof ChangeSet && e.getMessage().startsWith(INVALID_STRING_ENCODING_MESSAGE)) {
                 throw new UnexpectedLiquibaseException(e.getMessage() + " in changeSet " + object
@@ -294,11 +366,11 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
         }
     }
 
-    private void writeFieldValue(String objectNamespace,
-                                 String objectName,
-                                 Object value,
-                                 SerializationType serializationType,
-                                 String parentNamespace)
+    private void writeField(String objectNamespace,
+                            String objectName,
+                            Object value,
+                            SerializationType serializationType,
+                            String parentNamespace)
             throws SAXException
     {
         if (value == null) {
@@ -309,62 +381,78 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
             writeObject((LiquibaseSerializable) value);
         } else if (value instanceof Collection) {
             for (Object child : (Collection<?>) value) {
-                writeFieldValue(objectNamespace, objectName, child, serializationType, parentNamespace);
+                writeField(objectNamespace, objectName, child, serializationType, parentNamespace);
             }
         } else if (value instanceof Map) {
             for (Map.Entry<?,?> entry : ((Map<?,?>) value).entrySet()) {
                 // XXX: Some funny namespace handling
-                xmlWriter.startElement(DEFAULT_NS_PREFIX, STANDARD_CHANGELOG_NAMESPACE, objectName);
-                writeFieldValue(objectNamespace, "name", entry.getValue(), serializationType, objectNamespace);
-                writeFieldValue(objectNamespace, "value", entry.getValue(), serializationType, objectNamespace);
-                xmlWriter.endElement();
+                xmlOut.writeStartElement(DEFAULT_NS_PREFIX, STANDARD_CHANGELOG_NAMESPACE, objectName);
+                if (serializationType == SerializationType.NESTED_OBJECT) {
+                    writeField(objectNamespace, (String) entry.getKey(), entry.getValue(), serializationType, objectNamespace);
+                } else {
+                    writeField(objectNamespace, "name", entry.getKey(), SerializationType.NAMED_FIELD, objectNamespace);
+                    writeField(objectNamespace, "value", entry.getValue(), serializationType, objectNamespace);
+                }
+                xmlOut.writeEndElement();
             }
         } else if (value instanceof Object[]) {
             if (serializationType.equals(SerializationType.NESTED_OBJECT)) {
                 // XXX: More funny namespace handling
                 String namespace = STANDARD_CHANGELOG_NAMESPACE;
-                xmlWriter.startElement(DEFAULT_NS_PREFIX, namespace, objectName);
+                xmlOut.writeStartElement(DEFAULT_NS_PREFIX, namespace, objectName);
                 for (Object child : (Object[]) value) {
-                    writeFieldValue(namespace, objectName, child, serializationType, parentNamespace);
+                    writeField(namespace, objectName, child, serializationType, parentNamespace);
                 }
-                xmlWriter.endElement();
+                xmlOut.writeEndElement();
             } else {
                 for (Object child : (Object[]) value) {
-                    writeFieldValue(objectNamespace, objectName, child, serializationType, parentNamespace);
+                    writeField(objectNamespace, objectName, child, serializationType, parentNamespace);
                 }
             }
         } else if (serializationType.equals(SerializationType.NESTED_OBJECT)) {
             // XXX: A funny namespace handling
-            xmlWriter.startElement(DEFAULT_NS_PREFIX, STANDARD_CHANGELOG_NAMESPACE, objectName);
-            xmlWriter.writeText(value.toString()); // XXX: No checkString?
-            xmlWriter.endElement();
+            xmlOut.writeStartElement(DEFAULT_NS_PREFIX, STANDARD_CHANGELOG_NAMESPACE, objectName);
+            xmlOut.writeCharacters(value.toString()); // XXX: No checkString?
+            xmlOut.writeEndElement();
         } else if (serializationType.equals(SerializationType.DIRECT_VALUE)) {
             try {
-                xmlWriter.writeText(checkString(value.toString()));
+                xmlOut.writeCharacters(checkString(value.toString()));
             } catch (UnexpectedLiquibaseException e) {
                 throw new UnexpectedLiquibaseException(e.getMessage() + " in text of " + objectName
                         + ". To resolve, remove the invalid character on the database and try again");
             }
         } else {
-            String attributeName = qualifyAttributeName(objectName, objectNamespace, parentNamespace);
-            try {
-                xmlWriter.addAttribute(attributeName, checkString(value.toString()));
-            } catch (UnexpectedLiquibaseException e) {
-                if (e.getMessage().startsWith(INVALID_STRING_ENCODING_MESSAGE)) {
-                    throw new UnexpectedLiquibaseException(e.getMessage() + " on " + xmlWriter.currentElement() + "."
-                            + attributeName + ". To resolve, remove the invalid character on the database and try again");
-                }
+            writeAttribute(objectNamespace, objectName, value, parentNamespace);
+        }
+    }
+
+    private void writeAttribute(String namespace, String fieldName, Object value, String parentNamespace) {
+        String xmlNs = namespace;
+        if (namespace == null
+                || namespace.equals(parentNamespace)
+                || namespace.equals(STANDARD_CHANGELOG_NAMESPACE)) {
+            xmlNs = XMLConstants.NULL_NS_URI;
+        }
+        try {
+            xmlOut.writeAttribute(xmlNs, fieldName, checkString(value.toString()));
+        } catch (UnexpectedLiquibaseException e) {
+            if (e.getMessage().startsWith(INVALID_STRING_ENCODING_MESSAGE)) {
+                throw new UnexpectedLiquibaseException(e.getMessage() + " on " + currentElement + "."
+                        + fieldName + ". To resolve, remove the invalid character on the database and try again");
             }
         }
     }
 
-    private String qualifyAttributeName(String objectName, String objectNamespace, String parentNamespace) {
-        if (objectNamespace == null
-                || objectNamespace.equals(parentNamespace)
-                || objectNamespace.equals(STANDARD_CHANGELOG_NAMESPACE)) {
-            return objectName;
+    private static String resolvePath(Change change, String pathField) {
+        String filePath = (String) change.getSerializableFieldValue(pathField);
+        ChangeSet changeSet = change.getChangeSet();
+        String base = (changeSet.getChangeLog() == null)
+                      ? base = changeSet.getFilePath() // XXX: changeSet logicalFilePath could be anything
+                      : changeSet.getChangeLog().getPhysicalFilePath().replace('\\', '/');
+        if (base == null || base.indexOf('/') < 0) {
+            return base = "";
         }
-        return xmlWriter.qualifyName(objectNamespace, objectName);
+        return base.replaceFirst("/[^/]*$", "") + '/' + filePath;
     }
 
     static String xmlExt(String path) {
