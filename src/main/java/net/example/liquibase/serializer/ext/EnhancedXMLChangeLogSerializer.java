@@ -23,8 +23,8 @@ import java.util.Map;
 import java.util.Set;
 
 import javax.xml.XMLConstants;
-
-import org.xml.sax.SAXException;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamWriter;
 
 import liquibase.ContextExpression;
 import liquibase.change.Change;
@@ -35,6 +35,8 @@ import liquibase.change.core.SQLFileChange;
 import liquibase.changelog.ChangeLogChild;
 import liquibase.changelog.ChangeSet;
 import liquibase.changelog.DatabaseChangeLog;
+import liquibase.configuration.GlobalConfiguration;
+import liquibase.configuration.LiquibaseConfiguration;
 import liquibase.database.ObjectQuotingStrategy;
 import liquibase.exception.UnexpectedLiquibaseException;
 import liquibase.parser.NamespaceDetails;
@@ -42,7 +44,8 @@ import liquibase.parser.NamespaceDetailsFactory;
 import liquibase.serializer.LiquibaseSerializable;
 import liquibase.serializer.LiquibaseSerializable.SerializationType;
 import liquibase.serializer.core.xml.XMLChangeLogSerializer;
-import net.example.liquibase.serializer.ext.util.SimpleXmlWriter;
+
+import net.example.liquibase.serializer.ext.util.XmlWriterFactory;
 
 /**
  * Implements full serialization of {@code DatabaseChangeLog} breaking
@@ -59,12 +62,14 @@ import net.example.liquibase.serializer.ext.util.SimpleXmlWriter;
  */
 public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
 
+    private static final String XML_VERSION = "1.1";
+
     private static boolean debugBase = true;
 
     private String currentLogicalPath;
     private DatabaseChangeLog currentChangeLog;
     //private String currentPhysicalBase;
-    private SimpleXmlWriter xmlOut = new SimpleXmlWriter();
+    private XMLStreamWriter xmlOut;
     private String currentElement;
 
     public EnhancedXMLChangeLogSerializer() {
@@ -76,6 +81,12 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
         return super.getPriority() + 1;
     }
 
+    private static String defaultCharset() {
+        return LiquibaseConfiguration.getInstance()
+                  .getConfiguration(GlobalConfiguration.class)
+                  .getOutputEncoding();
+    }
+
     @Override
     public <T extends ChangeLogChild> void write(List<T> children, OutputStream out)
             throws IOException
@@ -83,9 +94,9 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
         try {
             currentChangeLog = null;
             currentLogicalPath = null;
-            xmlOut.setUpWrite(out);
+            xmlOut = XmlWriterFactory.setUpWrite(out);
             writeChangeLog(null, children);
-        } catch (SAXException e) {
+        } catch (XMLStreamException e) {
             throw ioExceptionFor(e);
         }
     }
@@ -96,11 +107,11 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
         try {
             currentChangeLog = null;
             currentLogicalPath = null;
-            xmlOut.setUpWrite(buf, pretty, false);
+            xmlOut = XmlWriterFactory.setUpWrite(buf, pretty, false);
             declareNamespacePrefixes();
             writeObject(object);
             xmlOut.writeEndDocument();
-        } catch (SAXException e) {
+        } catch (XMLStreamException e) {
             throw new UnexpectedLiquibaseException(e);
         }
         return buf.toString();
@@ -114,10 +125,10 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
             for (DatabaseChangeLog log : structure.getChangeLogs()) {
                 currentChangeLog = log;
                 currentLogicalPath = databaseChangeLog.getLogicalFilePath();
-                xmlOut.setUpWrite(buf);
+                xmlOut = XmlWriterFactory.setUpWrite(buf);
                 writeChangeLog(log, structure.getContent(log));
             }
-        } catch (IOException | SAXException e) {
+        } catch (XMLStreamException e) {
             throw new UnexpectedLiquibaseException(e);
         }
         return buf.toString();
@@ -150,9 +161,9 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
             Files.createDirectories(changeLogFile.getParent());
             try (OutputStream out = Files.newOutputStream(changeLogFile)) {
                 currentLogicalPath = currentLogicalPath.replace('\\', '/');
-                xmlOut.setUpWrite(out);
+                xmlOut = XmlWriterFactory.setUpWrite(out);
                 writeChangeLog(log, structure.getContent(log));
-            } catch (SAXException e) {
+            } catch (XMLStreamException e) {
                 throw ioExceptionFor(e);
             }
 
@@ -166,7 +177,7 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
         }
     }
 
-    private static IOException ioExceptionFor(SAXException e) {
+    private static IOException ioExceptionFor(XMLStreamException e) {
         return (e.getCause() instanceof IOException)
                 ? (IOException) e.getCause()
                 : new IOException(e);
@@ -174,9 +185,9 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
 
     private void writeChangeLog(DatabaseChangeLog changeLog,
                                 List<? extends ChangeLogChild> content)
-            throws IOException, SAXException
+            throws XMLStreamException
     {
-        xmlOut.writeStartDocument();
+        xmlOut.writeStartDocument(defaultCharset(), XML_VERSION);
         xmlOut.writeStartElement("databaseChangeLog");
         writeChangeLogAttributes(changeLog);
         for (ChangeLogChild child : content) {
@@ -186,7 +197,7 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
         xmlOut.writeEndDocument();
     }
 
-    private String declareNamespacePrefixes() {
+    private String declareNamespacePrefixes() throws XMLStreamException {
         xmlOut.setPrefix(DEFAULT_NS_PREFIX, STANDARD_CHANGELOG_NAMESPACE);
 
         StringBuilder schemaLocations = new StringBuilder(500);
@@ -208,7 +219,7 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
         return schemaLocations.toString().trim();
     }
 
-    private void writeChangeLogAttributes(DatabaseChangeLog changeLog) {
+    private void writeChangeLogAttributes(DatabaseChangeLog changeLog) throws XMLStreamException {
         if (changeLog != null) {
             if (currentLogicalPath != null && !currentLogicalPath.equals(changeLog.getLogicalFilePath())) {
                 xmlOut.writeAttribute("logicalFilePath", changeLog.getLogicalFilePath());
@@ -231,7 +242,7 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
         }
     }
 
-    private Set<String> writeSerializableAttributes(LiquibaseSerializable object) {
+    private Set<String> writeSerializableAttributes(LiquibaseSerializable object) throws XMLStreamException {
         Set<String> remaining = new LinkedHashSet<>();
         for (String field : object.getSerializableFields()) {
             Object value = object.getSerializableFieldValue(field);
@@ -272,7 +283,9 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
         return remaining;
     }
 
-    private boolean writeChangeSetAttribute(LiquibaseSerializable object, String field) {
+    private boolean writeChangeSetAttribute(LiquibaseSerializable object, String field)
+            throws XMLStreamException
+    {
         if (!(object instanceof ChangeSet)) {
             return false;
         }
@@ -321,7 +334,9 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
         return value.toString();
     }
 
-    private boolean writeFilePathAttribute(LiquibaseSerializable object, String field) {
+    private boolean writeFilePathAttribute(LiquibaseSerializable object, String field)
+            throws XMLStreamException
+    {
         String pathField;
         if (object instanceof LoadDataChange) {
             pathField = "file";
@@ -345,7 +360,7 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
         return false;
     }
 
-    private void writeObject(LiquibaseSerializable object) throws SAXException {
+    private void writeObject(LiquibaseSerializable object) throws XMLStreamException {
         String namespace = object.getSerializedObjectNamespace();
         try {
             xmlOut.writeStartElement(namespace, object.getSerializedObjectName());
@@ -371,7 +386,7 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
                             Object value,
                             SerializationType serializationType,
                             String parentNamespace)
-            throws SAXException
+            throws XMLStreamException
     {
         if (value == null) {
             return;
@@ -426,7 +441,7 @@ public class EnhancedXMLChangeLogSerializer extends XMLChangeLogSerializer {
         }
     }
 
-    private void writeAttribute(String namespace, String fieldName, Object value, String parentNamespace) {
+    private void writeAttribute(String namespace, String fieldName, Object value, String parentNamespace) throws XMLStreamException {
         String xmlNs = namespace;
         if (namespace == null
                 || namespace.equals(parentNamespace)
