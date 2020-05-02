@@ -17,14 +17,13 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 
 import liquibase.ContextExpression;
+import liquibase.LabelExpression;
 import liquibase.Labels;
 import liquibase.changelog.ChangeLogChild;
-import liquibase.changelog.ChangeLogInclude;
 import liquibase.changelog.ChangeLogParameters.ChangeLogParameter;
 import liquibase.changelog.ChangeLogProperty;
 import liquibase.changelog.ChangeSet;
 import liquibase.changelog.DatabaseChangeLog;
-import liquibase.logging.LogService;
 import liquibase.precondition.Precondition;
 import liquibase.precondition.core.PreconditionContainer;
 import liquibase.precondition.core.PreconditionContainer.ErrorOption;
@@ -32,15 +31,24 @@ import liquibase.precondition.core.PreconditionContainer.FailOption;
 import liquibase.precondition.core.PreconditionContainer.OnSqlOutputOption;
 import liquibase.serializer.LiquibaseSerializable;
 import liquibase.serializer.LiquibaseSerializable.SerializationType;
-import net.example.liquibase.command.ext.ChangeLogAttributesFilter.ChangeSetKey;
 
+/**
+ * Reconstructs {@code DatabaseChangeLog} source file structure.
+ */
 class ChangeLogContent {
 
     private List<DatabaseChangeLog> dbChangeLogs = new ArrayList<>();
     private Map<DatabaseChangeLog, List<ChangeLogChild>> contentMap = new IdentityHashMap<>();
-    private Map<ChangeSetKey, String> logicalFileMap = new HashMap<>();
     private boolean singleFile;
 
+    /**
+     * Constructs new {@code ChangeLogContent} for the given changelog.
+     *
+     * @param   changeLog  a changelog to reconstruct the content for;
+     * @param   singleFile  {@code true} to construct content for a single
+     *          file output, or {@code false} to construct content for
+     *          as many source files there appear to be.
+     */
     ChangeLogContent(DatabaseChangeLog changeLog, boolean singleFile) {
         this.singleFile = singleFile;
         
@@ -56,33 +64,24 @@ class ChangeLogContent {
 
     private void init(DatabaseChangeLog changeLog) {
         List<ChangeLogChild> content = addContent(changeLog);
-        String basePath = changeLog.getLogicalFilePath();
         for (ChangeSet changeSet : changeLog.getChangeSets()) {
             DatabaseChangeLog nextLog = changeSet.getChangeLog();
             if (nextLog == changeLog || singleFile) {
                 content.add(changeSet);
-                mapChange(basePath, changeSet);
             } else if (!contentMap.containsKey(nextLog)) {
-                ChangeLogInclude include = new ChangeLogInclude();
+                MoreCompleteChangeLogInclude include = new MoreCompleteChangeLogInclude();
                 include.setFile(urlPath(xmlExt(nextLog.getPhysicalFilePath())));
                 ContextExpression includeContexts = nextLog.getIncludeContexts();
                 if (includeContexts != null && !includeContexts.isEmpty()) {
                     include.setContext(includeContexts);
                 }
+                LabelExpression includeLabels = nextLog.getIncludeLabels();
+                if (includeLabels != null && !includeLabels.isEmpty()) {
+                    include.setLabels(includeLabels);
+                }
                 content.add(include);
                 init(nextLog);
             }
-        }
-    }
-
-    private void mapChange(String basePath, ChangeSet changeSet) {
-        if (basePath.equals(changeSet.getFilePath())) {
-            return;
-        }
-        if (logicalFileMap.put(ChangeSetKey.get(changeSet),
-                               changeSet.getFilePath()) != null) {
-            LogService.getLog(EnhancedXMLChangeLogSerializer.class)
-                    .warning("Duplicate change detected: " + ChangeSetKey.get(changeSet));
         }
     }
 
@@ -98,10 +97,6 @@ class ChangeLogContent {
             throw new NoSuchElementException();
         }
         return Collections.unmodifiableList(content);
-    }
-
-    public Map<ChangeSetKey, String> getLogicalFileMap() {
-        return Collections.unmodifiableMap(logicalFileMap);
     }
 
     private List<ChangeLogChild> addContent(DatabaseChangeLog changeLog) {
@@ -184,31 +179,22 @@ class ChangeLogContent {
         prop.setName(param.getKey());
         prop.setValue(param.getValue().toString());
         //prop.setFile(null);
-        prop.setDbms(stringValueOf(param.getValidDatabases()));
-        prop.setLabels(stringValueOf(param.getLabels()));
-        prop.setContext(stringValueOf(param.getValidContexts()));
+        List<String> dbms = param.getValidDatabases();
+        if (dbms != null && !dbms.isEmpty()) {
+            prop.setDbms(String.join(",", dbms));
+        }
+        Labels labels = param.getLabels();
+        if (labels != null && !labels.isEmpty()) {
+            prop.setLabels(labels.toString());
+        }
+        ContextExpression context = param.getValidContexts();
+        if (context != null && !context.isEmpty()) {
+            prop.setContext(context.toString());
+        }
         if (!param.isGlobal()) {
             prop.setGlobal(false);
         }
         return prop;
-    }
-
-    private static String stringValueOf(Iterable<String> values) {
-        return (values == null) ? null : String.join(",", values);
-    }
-
-    private static String stringValueOf(ContextExpression contexts) {
-        if (contexts == null || contexts.isEmpty()) {
-            return null;
-        }
-        return contexts.toString();
-    }
-
-    private static String stringValueOf(Labels labels) {
-        if (labels == null || labels.isEmpty()) {
-            return null;
-        }
-        return labels.toString();
     }
 
     private static String urlPath(String path) {

@@ -6,7 +6,7 @@
 databaseChangeLog(context: 'infoStuff',
         logicalFilePath: 'net/example/liquibase/groovy/migrate/20191201335406_addStatusToPeople.groovy') {
 
-    changeSet(id: '20191201335406', author: 'john') {
+    changeSet(id: '20191201335406', author: 'john', labels: 'lbl-abc, lbl-456') {
         addColumn(tableName: 'people') {
             column(name: '${statusColumn}', type: 'java.sql.Types.CHAR(5)')
         }

@@ -35,6 +35,7 @@ public class CompileXMLCommandTest {
     @Test
     public void nestedInclude() throws Exception {
         command.setSrc("net/example/liquibase/groovy2/changelog.groovy");
+        command.setSingleFile(false);
         assertResult(command.execute());
     }
 

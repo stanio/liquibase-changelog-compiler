@@ -21,7 +21,8 @@ databaseChangeLog {
 
     include file: 'init_schema/20191201335406_addStatusToPeople.groovy',
             relativeToChangelogFile: true,
-            context: 'requiredStuff'
+            context: 'requiredStuff',
+            labels: 'lbl-123, lbl-456'
 
     changeSet(id: '20191202435365', author: 'saly', logicalFilePath: 'foo_bar') {
         addColumn(tableName: 'people') {

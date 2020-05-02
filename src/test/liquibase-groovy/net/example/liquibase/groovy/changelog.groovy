@@ -5,6 +5,9 @@
 
 databaseChangeLog {
 
+    property name: 'statusColumn', value: 'status', dbms: 'derby'
+    property name: 'statusColumn', value: 'yaba_daba_doo', dbms: 'mysql'
+
     includeAll path: 'migrate/', relativeToChangelogFile: true
 
 }
