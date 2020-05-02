@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                              http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>net.example.liquibase</groupId>
+    <artifactId>liquibase-compile-command</artifactId>
+    <version>0.1.0</version>
+
+    <name>Liquibase Compile Command</name>
+    <url>https://github.com/stanio/liquibase-compile-command</url>
+
+    <developers>
+        <developer>
+            <name>Stanimir Stamenkov</name>
+            <email>stanio@yahoo.com</email>
+        </developer>
+    </developers>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
+        <maven.test.redirectTestOutputToFile>true</maven.test.redirectTestOutputToFile>
+        <liquibase.version>3.8.5</liquibase.version>
+        <liquibase.groovyDsl.version>2.1.1</liquibase.groovyDsl.version>
+        <derby.version>10.14.2.0</derby.version>
+        <quiet>true</quiet><!-- maven-javadoc-plugin -->
+        <!--doclint>-html</doclint> XXX: JDK-8048806 -->
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
+            <version>${liquibase.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>ch.qos.logback</groupId>
+                    <artifactId>logback-classic</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>javax.xml.bind</groupId>
+                    <artifactId>jaxb-api</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.derby</groupId>
+            <artifactId>derby</artifactId>
+            <version>${derby.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-groovy-dsl</artifactId>
+            <version>${liquibase.groovyDsl.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <version>1.7.28</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <testResources>
+            <testResource>
+                <directory>${basedir}/src/test/resources</directory>
+            </testResource>
+            <testResource>
+                <directory>${basedir}/src/test/liquibase-groovy</directory>
+            </testResource>
+        </testResources>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.liquibase</groupId>
+                    <artifactId>liquibase-maven-plugin</artifactId>
+                    <version>${liquibase.version}</version>
+                    <configuration>
+                        <promptOnNonLocalDatabase>false</promptOnNonLocalDatabase>
+                        <propertyFile>liquibase.properties</propertyFile>
+                    </configuration>
+                    <dependencies>
+                        <dependency>
+                            <groupId>org.liquibase</groupId>
+                            <artifactId>liquibase-groovy-dsl</artifactId>
+                            <version>${liquibase.groovyDsl.version}</version>
+                        </dependency>
+                    </dependencies>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+        <plugins>
+            <plugin>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.2.0</version>
+                <configuration>
+                    <archive>
+                        <manifestEntries>
+                            <Liquibase-Package>net.example.liquibase.command.ext</Liquibase-Package>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>3.2.0</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>3.1.1</version>
+                        <configuration>
+                            <tags>
+                                <tag>
+                                    <name>apiNote</name>
+                                    <placement>a</placement>
+                                    <head>API Note:</head>
+                                </tag>
+                                <tag>
+                                    <name>implSpec</name>
+                                    <placement>a</placement>
+                                    <head>Implementation Requirements:</head>
+                                </tag>
+                                <tag>
+                                    <name>implNote</name>
+                                    <placement>a</placement>
+                                    <head>Implementation Note:</head>
+                                </tag>
+                            </tags>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
+</project>
