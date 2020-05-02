@@ -1,0 +1,61 @@
+/*
+ * This module, both source code and documentation,
+ * is in the Public Domain, and comes with NO WARRANTY.
+ */
+
+plugins {
+    id 'java'
+    id 'application'
+    id 'org.liquibase.gradle' version '2.0.2'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+def liquibaseXml = "$buildDir/liquibase"
+
+sourceSets {
+    main {
+        resources {
+            output.dir(liquibaseXml, builtBy: 'liquibaseCompile')
+        }
+    }
+}
+
+liquibase {
+    activities {
+        main {
+            classpath(['src/main/liquibase', 'src/main/resources'].join(File.pathSeparator))
+            changeLogFile 'net/example/liquibase/groovy/changelog.groovy'
+        }
+    }
+}
+
+task liquibaseCompile(type: net.example.liquibase.gradle.LiquibaseCompile) {
+    inputs.dir 'src/main/liquibase'
+    outputs.dir liquibaseXml
+    classpath = [file('src/main/liquibase').toString().toString(),
+                 file('src/main/resources').toString().toString()]
+    changeLogFile 'net/example/liquibase/groovy/changelog.groovy'
+}
+
+repositories {
+    jcenter()
+}
+
+dependencies {
+    implementation "org.liquibase:liquibase-core:$liquibaseVersion", {
+        exclude group: 'javax.xml.bind', module: 'jaxb-api'
+    }
+    implementation 'org.apache.derby:derby:10.14.2.0'
+
+    liquibaseRuntime "org.liquibase:liquibase-core:$liquibaseVersion"
+    liquibaseRuntime 'org.liquibase:liquibase-groovy-dsl:2.1.0'
+    liquibaseRuntime 'org.apache.derby:derby:10.14.2.0'
+
+    testImplementation 'junit:junit:4.12'
+}
+
+mainClassName = 'net.example.liquibase.groovy.App'

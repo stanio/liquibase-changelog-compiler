@@ -1,0 +1,13 @@
+/*
+ * This module, both source code and documentation,
+ * is in the Public Domain, and comes with NO WARRANTY.
+ */
+
+repositories {
+    jcenter()
+}
+
+dependencies {
+    implementation 'org.liquibase:liquibase-core:3.8.3'
+    runtimeOnly 'org.liquibase:liquibase-groovy-dsl:2.1.0'
+}
