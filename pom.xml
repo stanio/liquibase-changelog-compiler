@@ -38,7 +38,7 @@
         <!--doclint>-html</doclint> XXX: JDK-8048806 -->
         <javadoc.debug>false</javadoc.debug>
         <javadoc.includeDependencySources>false</javadoc.includeDependencySources>
-        <liquibase.version>3.8.5</liquibase.version>
+        <liquibase.version>4.8.0</liquibase.version>
         <liquibase.groovyDsl.version>2.1.1</liquibase.groovyDsl.version>
         <derby.version>10.14.2.0</derby.version>
     </properties>
